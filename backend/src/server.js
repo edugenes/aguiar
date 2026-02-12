@@ -116,6 +116,20 @@ db.serialize(() => {
     )`,
   );
 
+  db.run(
+    `CREATE TABLE IF NOT EXISTS orders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      customer_name TEXT NOT NULL,
+      customer_phone TEXT NOT NULL,
+      customer_address TEXT NOT NULL,
+      notes TEXT,
+      total_cents INTEGER NOT NULL,
+      status TEXT NOT NULL,
+      items_json TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    )`,
+  );
+
   // Migração leve para novos campos comerciais
   db.all('PRAGMA table_info(products)', (err, rows) => {
     if (err) {
@@ -248,9 +262,106 @@ function mapProduct(row) {
   };
 }
 
+function mapOrder(row) {
+  return {
+    id: row.id,
+    customer_name: row.customer_name,
+    customer_phone: row.customer_phone,
+    customer_address: row.customer_address,
+    notes: row.notes || '',
+    total_cents: row.total_cents,
+    status: row.status,
+    items_json: row.items_json,
+    created_at: row.created_at,
+  };
+}
+
 // Routes
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
+});
+
+// Orders (loja online)
+app.post('/orders', (req, res) => {
+  const { customer_name, customer_phone, customer_address, notes, total_cents, status, items_json } =
+    req.body || {};
+
+  if (!customer_name || !customer_phone || !customer_address) {
+    return res.status(400).json({ message: 'Dados do cliente são obrigatórios.' });
+  }
+
+  const totalCentsInt = parseInt(total_cents, 10);
+  if (!Number.isFinite(totalCentsInt) || totalCentsInt < 0) {
+    return res.status(400).json({ message: 'Total inválido.' });
+  }
+
+  const statusValue = status || 'pending';
+  const allowedStatus = ['pending', 'confirmed', 'cancelled'];
+  if (!allowedStatus.includes(statusValue)) {
+    return res.status(400).json({ message: 'Status inválido.' });
+  }
+
+  const itemsJsonString =
+    typeof items_json === 'string' ? items_json : JSON.stringify(items_json ?? []);
+
+  // Pequena validação estrutural dos itens
+  try {
+    const parsed = JSON.parse(itemsJsonString);
+    if (!Array.isArray(parsed)) {
+      throw new Error('items_json deve ser um array');
+    }
+  } catch (e) {
+    console.error('Erro ao validar items_json do pedido', e);
+    return res.status(400).json({ message: 'Estrutura de itens do pedido inválida.' });
+  }
+
+  const now = new Date().toISOString();
+  const sql = `INSERT INTO orders (
+      customer_name,
+      customer_phone,
+      customer_address,
+      notes,
+      total_cents,
+      status,
+      items_json,
+      created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
+
+  const params = [
+    customer_name,
+    customer_phone,
+    customer_address,
+    notes || '',
+    totalCentsInt,
+    statusValue,
+    itemsJsonString,
+    now,
+  ];
+
+  db.run(sql, params, function (err) {
+    if (err) {
+      console.error('Erro ao registrar pedido', err);
+      return res.status(500).json({ message: 'Erro ao registrar pedido.' });
+    }
+
+    db.get('SELECT * FROM orders WHERE id = ?', [this.lastID], (err2, row) => {
+      if (err2) {
+        console.error('Erro ao carregar pedido criado', err2);
+        return res.status(500).json({ message: 'Erro ao carregar pedido criado.' });
+      }
+      res.status(201).json(mapOrder(row));
+    });
+  });
+});
+
+app.get('/orders', (req, res) => {
+  db.all('SELECT * FROM orders ORDER BY created_at DESC', [], (err, rows) => {
+    if (err) {
+      console.error('Erro ao listar pedidos', err);
+      return res.status(500).json({ message: 'Erro ao listar pedidos.' });
+    }
+    res.json(rows.map(mapOrder));
+  });
 });
 
 app.get('/layout-config', (req, res) => {
