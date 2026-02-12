@@ -785,7 +785,11 @@ app.get('/catalog/pdf', async (req, res) => {
             args: ['--no-sandbox', '--disable-setuid-sandbox'],
           });
           const page = await browser.newPage();
-          await page.setContent(html, { waitUntil: 'networkidle0' });
+          // Aumenta timeout e usa um evento de carregamento mais simples
+          page.setDefaultNavigationTimeout(60000);
+          await page.setContent(html, {
+            waitUntil: 'domcontentloaded',
+          });
           const pdfBuffer = await page.pdf({ format: 'A4', printBackground: true });
           await browser.close();
 
