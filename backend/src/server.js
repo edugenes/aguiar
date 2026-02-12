@@ -9,20 +9,46 @@ const app = express();
 const PORT = process.env.PORT || 4000;
 
 // Paths
-const ROOT_DIR = path.resolve(__dirname, '..', '..');
-const DB_PATH = path.join(ROOT_DIR, 'database', 'catalog.db');
+// Raiz do backend (pasta "backend")
+const ROOT_DIR = path.resolve(__dirname, '..');
+
+// Caminho do banco:
+// - Em produção (Railway, etc.): use DB_PATH se definido
+// - Caso contrário, usa "catalog.db" em um diretório local de dados
+const DEFAULT_DB_DIR =
+  (process.env.DB_DIR && process.env.DB_DIR.trim() !== '')
+    ? process.env.DB_DIR
+    : path.join(ROOT_DIR, 'data');
+
+const DB_PATH =
+  process.env.DB_PATH && process.env.DB_PATH.trim() !== ''
+    ? process.env.DB_PATH
+    : path.join(DEFAULT_DB_DIR, 'catalog.db');
+
+// Diretório para uploads (dentro do backend)
 const UPLOADS_DIR = path.join(ROOT_DIR, 'uploads');
+
+// Caminho da logo usada no PDF (opcional).
+// Em ambientes onde o frontend não está no mesmo filesystem, simplesmente não haverá logo.
 const LOGO_PATH = path.join(
   ROOT_DIR,
+  '..',
   'frontend',
   'src',
   'assets',
   'logo-aguiar-moderna.png',
 );
 
+// Garante que diretórios de dados existem
+const DB_DIR = path.dirname(DB_PATH);
+if (!fs.existsSync(DB_DIR)) {
+  fs.mkdirSync(DB_DIR, { recursive: true });
+}
 if (!fs.existsSync(UPLOADS_DIR)) {
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 }
+
+console.log('Usando banco SQLite em:', DB_PATH);
 
 // Middleware - CORS permitindo qualquer porta do localhost
 app.use((req, res, next) => {
