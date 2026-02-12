@@ -1,6 +1,22 @@
 import { isMobile } from '../utils/platform';
 
-const API_BASE = 'https://aguiar-production.up.railway.app';
+// Detecta automaticamente a URL da API:
+// - Produção: domínio aguiaracessorios.com.br → Railway
+// - Dev: localhost → backend local
+const API_BASE = (() => {
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    // Produção: site em aguiaracessorios.com.br chamando backend no Railway
+    if (host.endsWith('aguiaracessorios.com.br')) {
+      return 'https://aguiar-production.up.railway.app';
+    }
+    // Se existir variável de ambiente VITE_API_BASE, usa ela
+    const envBase = (import.meta as any).env?.VITE_API_BASE as string | undefined;
+    if (envBase) return envBase;
+  }
+  // Padrão: desenvolvimento local
+  return 'http://localhost:4000';
+})();
 
 // Interface para produtos
 export interface Product {

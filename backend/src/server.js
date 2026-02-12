@@ -54,6 +54,7 @@ console.log('Usando banco SQLite em:', DB_PATH);
 // Permite:
 // - localhost/127.0.0.1 (desenvolvimento)
 // - domínio de produção na HostGator
+// - domínio principal aguiaracessorios.com.br
 app.use((req, res, next) => {
   const origin = req.headers.origin;
   const allowedHostgatorDomain =
@@ -63,7 +64,9 @@ app.use((req, res, next) => {
     !origin ||
     origin.includes('localhost') ||
     origin.includes('127.0.0.1') ||
-    origin === allowedHostgatorDomain;
+    origin === allowedHostgatorDomain ||
+    origin === 'https://aguiaracessorios.com.br' ||
+    origin === 'http://aguiaracessorios.com.br';
 
   if (isAllowedOrigin) {
     res.setHeader('Access-Control-Allow-Origin', origin || '*');
@@ -71,9 +74,11 @@ app.use((req, res, next) => {
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
     res.setHeader('Access-Control-Allow-Credentials', 'false');
   }
+
   if (req.method === 'OPTIONS') {
     return res.sendStatus(200);
   }
+
   next();
 });
 app.use(express.json());
