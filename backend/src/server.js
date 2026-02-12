@@ -50,10 +50,22 @@ if (!fs.existsSync(UPLOADS_DIR)) {
 
 console.log('Usando banco SQLite em:', DB_PATH);
 
-// Middleware - CORS permitindo qualquer porta do localhost
+// Middleware - CORS
+// Permite:
+// - localhost/127.0.0.1 (desenvolvimento)
+// - domínio de produção na HostGator
 app.use((req, res, next) => {
   const origin = req.headers.origin;
-  if (!origin || origin.includes('localhost') || origin.includes('127.0.0.1')) {
+  const allowedHostgatorDomain =
+    'https://eduardogenesvieira1770888471160.2552165.meusitehostgator.com.br';
+
+  const isAllowedOrigin =
+    !origin ||
+    origin.includes('localhost') ||
+    origin.includes('127.0.0.1') ||
+    origin === allowedHostgatorDomain;
+
+  if (isAllowedOrigin) {
     res.setHeader('Access-Control-Allow-Origin', origin || '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
