@@ -1,0 +1,670 @@
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: #05070a;
+  color: #e5e7eb;
+}
+
+#root {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem 3rem;
+}
+
+.app-container header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  padding: 1rem 1.25rem;
+  border-radius: 1rem;
+  background: radial-gradient(circle at top left, #1d9bf0 0, #0050a5 40%, #020617 100%);
+  box-shadow: 0 24px 60px -30px rgba(15, 23, 42, 0.9);
+}
+
+.app-container h1 {
+  font-size: 1.6rem;
+  margin: 0;
+  color: #f9fafb;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.brand-logo {
+  height: 42px;
+  width: auto;
+}
+
+.brand-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.1;
+}
+
+.brand-name {
+  font-weight: 700;
+  font-size: 1.2rem;
+  text-transform: lowercase;
+}
+
+.brand-subtitle {
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #bfdbfe;
+}
+
+.primary {
+  background: #1d9bf0;
+  color: #ffffff;
+  border: none;
+  padding: 0.6rem 1.2rem;
+  border-radius: 999px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.95rem;
+  box-shadow: 0 10px 25px -12px rgba(37, 99, 235, 0.9);
+  transition: transform 0.1s ease, box-shadow 0.1s ease, background 0.1s ease, opacity 0.1s ease;
+}
+
+.primary:hover {
+  background: #0084ff;
+  color: #ffffff;
+  transform: translateY(-1px);
+  box-shadow: 0 18px 35px -18px rgba(37, 99, 235, 1);
+}
+
+.primary:disabled {
+  background: #374151;
+  color: #9ca3af;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.4fr);
+  gap: 1.5rem;
+}
+
+.card {
+  background: #020617;
+  border-radius: 1rem;
+  padding: 1.5rem;
+  box-shadow: 0 18px 45px -28px rgba(15, 23, 42, 0.9);
+  border: 1px solid #0b1220;
+}
+
+.card h2 {
+  margin: 0 0 1rem;
+  font-size: 1.1rem;
+}
+
+.column-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.card-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.product-filters {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.product-filters input,
+.product-filters select {
+  border-radius: 999px;
+  border: 1px solid #374151;
+  background: #1f2937;
+  color: #f9fafb;
+  padding: 0.35rem 0.7rem;
+  font-size: 0.8rem;
+}
+
+.product-filters input:focus,
+.product-filters select:focus {
+  outline: 2px solid #1d9bf033;
+  border-color: #1d9bf0;
+}
+
+.secondary {
+  border-radius: 999px;
+  border: 1px solid #374151;
+  background: #1f2937;
+  color: #f9fafb;
+  padding: 0.4rem 0.9rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background 0.15s ease;
+}
+
+.secondary:hover {
+  background: #374151;
+  border-color: #4b5563;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.9rem;
+  text-align: left;
+}
+
+.form input,
+.form textarea {
+  border-radius: 0.6rem;
+  border: 1px solid #1f2937;
+  padding: 0.55rem 0.7rem;
+  font-size: 0.9rem;
+  background: #020617;
+  color: #e5e7eb;
+}
+
+.form input:focus,
+.form textarea:focus {
+  outline: 2px solid #1d9bf033;
+  border-color: #1d9bf0;
+}
+
+.form-actions {
+  display: flex;
+  gap: 0.6rem;
+  margin-top: 0.5rem;
+}
+
+.form-actions button {
+  border-radius: 999px;
+  border: 1px solid #374151;
+  background: #1f2937;
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: #f9fafb;
+  font-weight: 500;
+  transition: background 0.15s ease;
+}
+
+.form-actions button:hover {
+  background: #374151;
+  border-color: #4b5563;
+}
+
+.error {
+  color: #fca5a5;
+  background: #7f1d1d;
+  border: 1px solid #991b1b;
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.85rem;
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+}
+
+.product-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+
+.product-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.7rem 0.2rem;
+  border-bottom: 1px solid #111827;
+}
+
+.product-main {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.thumb {
+  width: 56px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: 0.6rem;
+  border: 1px solid #111827;
+  background: #020617;
+}
+
+.muted {
+  margin: 0.15rem 0 0.1rem;
+  font-size: 0.8rem;
+  color: #6b7280;
+  max-width: 420px;
+}
+
+.price {
+  margin: 0;
+  font-weight: 600;
+  color: #22c55e;
+  font-size: 0.9rem;
+}
+
+.badge {
+  margin: 0.1rem 0;
+  font-size: 0.75rem;
+  color: #bfdbfe;
+}
+
+.badge-pill {
+  margin-left: 0.4rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  border: 1px solid #f97316;
+  color: #fed7aa;
+  font-size: 0.7rem;
+}
+
+.sku-badge {
+  margin-left: 0.5rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  background: #1f2937;
+  color: #9ca3af;
+  font-size: 0.7rem;
+  font-family: monospace;
+}
+
+.product-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.product-actions button {
+  border-radius: 999px;
+  border: 1px solid #374151;
+  background: #1f2937;
+  color: #f9fafb;
+  padding: 0.3rem 0.7rem;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 500;
+  transition: background 0.15s ease;
+}
+
+.product-actions button:hover {
+  background: #374151;
+  border-color: #4b5563;
+}
+
+.divider {
+  border: none;
+  border-top: 1px solid #111827;
+  margin: 0.75rem 0;
+}
+
+.layout-config {
+  margin-top: 0.25rem;
+}
+
+.layout-config h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+}
+
+.layout-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem 1rem;
+  margin-top: 0.25rem;
+}
+
+.layout-form label {
+  font-size: 0.85rem;
+}
+
+.layout-form input {
+  margin-top: 0.2rem;
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.checkbox-row input[type='checkbox'] {
+  width: 14px;
+  height: 14px;
+}
+
+/* Modal de Preview PDF */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 2rem;
+  overflow-y: auto;
+}
+
+.modal-content {
+  background: #020617;
+  border-radius: 1rem;
+  max-width: 900px;
+  width: 100%;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #1f2937;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.9);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem;
+  border-bottom: 1px solid #1f2937;
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-size: 1.2rem;
+  color: #f9fafb;
+}
+
+.modal-close {
+  background: transparent;
+  border: none;
+  color: #9ca3af;
+  font-size: 2rem;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  transition: background 0.15s ease;
+}
+
+.modal-close:hover {
+  background: #1f2937;
+  color: #f9fafb;
+}
+
+.pdf-preview {
+  padding: 1.5rem;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.pdf-preview-page {
+  background: #05070a;
+  padding: 2rem;
+  border-radius: 0.5rem;
+  min-height: 800px;
+}
+
+.pdf-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.25rem;
+  border-radius: 1rem;
+  background: radial-gradient(circle at top left, #1d9bf0 0, #0050a5 40%, #020617 100%);
+  margin-bottom: 1.5rem;
+}
+
+.pdf-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.pdf-brand-logo {
+  height: 40px;
+  width: auto;
+}
+
+.pdf-brand-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.1;
+}
+
+.pdf-brand-name {
+  font-weight: 700;
+  font-size: 1.1rem;
+  text-transform: lowercase;
+  color: #ffffff;
+}
+
+.pdf-brand-subtitle {
+  font-size: 0.65rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #bfdbfe;
+}
+
+.pdf-title-block {
+  text-align: right;
+}
+
+.pdf-title-block h1 {
+  margin: 0 0 0.25rem;
+  font-size: 1.1rem;
+  color: #ffffff;
+}
+
+.pdf-title-block span {
+  font-size: 0.75rem;
+  color: #cbd5f5;
+}
+
+.pdf-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.pdf-card {
+  background: #020617;
+  border: 1px solid #111827;
+  border-radius: 0.625rem;
+  padding: 0.75rem;
+  position: relative;
+  cursor: grab;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  user-select: none;
+  height: 280px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.pdf-card:active {
+  cursor: grabbing;
+}
+
+.pdf-card.dragging {
+  opacity: 0.5;
+  transform: scale(0.95);
+  z-index: 1000;
+}
+
+.pdf-card.drag-over {
+  border-color: #1d9bf0;
+  box-shadow: 0 0 0 2px rgba(29, 155, 240, 0.3);
+  transform: scale(1.02);
+}
+
+.pdf-card-handle {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  color: #6b7280;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: grab;
+  user-select: none;
+  opacity: 0.6;
+  transition: opacity 0.2s ease;
+}
+
+.pdf-card:hover .pdf-card-handle {
+  opacity: 1;
+}
+
+.pdf-card:active .pdf-card-handle {
+  cursor: grabbing;
+}
+
+.pdf-card img {
+  width: 100%;
+  height: 120px;
+  object-fit: contain;
+  margin-bottom: 0.5rem;
+  border-radius: 0.5rem;
+  flex-shrink: 0;
+}
+
+.pdf-name {
+  font-weight: bold;
+  font-size: 0.85rem;
+  margin-bottom: 0.25rem;
+  color: #f9fafb;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pdf-sku {
+  font-size: 0.7rem;
+  color: #9ca3af;
+  font-family: monospace;
+  margin-bottom: 0.25rem;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pdf-description {
+  font-size: 0.7rem;
+  color: #9ca3af;
+  margin-bottom: 0.25rem;
+  line-height: 1.3;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  flex: 1;
+  min-height: 2.6em;
+}
+
+.pdf-category {
+  font-size: 0.7rem;
+  color: #bfdbfe;
+  margin-bottom: 0.25rem;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pdf-promo-badge {
+  margin-left: 0.5rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  border: 1px solid #f97316;
+  color: #fed7aa;
+  font-size: 0.65rem;
+}
+
+.pdf-price {
+  color: #22c55e;
+  font-weight: bold;
+  font-size: 0.85rem;
+  margin-top: auto;
+  padding-top: 0.25rem;
+  flex-shrink: 0;
+}
+
+.pdf-footer {
+  margin-top: 1.5rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #111827;
+  font-size: 0.7rem;
+  color: #6b7280;
+  display: flex;
+  justify-content: space-between;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+  padding: 1.5rem;
+  border-top: 1px solid #1f2937;
+}
+
+@media (max-width: 880px) {
+  .layout-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .modal-overlay {
+    padding: 1rem;
+  }
+
+  .pdf-grid {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 0.75rem;
+  }
+}
+
+@media (max-width: 880px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  #root {
+    padding: 1.5rem 1rem 2.5rem;
+  }
+
+  .app-container header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.6rem;
+  }
+}

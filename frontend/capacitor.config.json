@@ -1,0 +1,14 @@
+{
+  "appId": "com.aguiar.catalogo",
+  "appName": "Aguiar Catálogo",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  },
+  "android": {
+    "buildOptions": {
+      "keystorePath": "",
+      "keystoreAlias": ""
+    }
+  }
+}
