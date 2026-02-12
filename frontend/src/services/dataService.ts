@@ -1,6 +1,6 @@
 import { isMobile } from '../utils/platform';
 
-const API_BASE = 'http://localhost:4000';
+const API_BASE = 'https://aguiar-production.up.railway.app';
 
 // Interface para produtos
 export interface Product {

@@ -4,7 +4,7 @@ import logoAguiar from './assets/logo-aguiar-moderna.png'
 import { dataService, type Product, type LayoutConfig } from './services/dataService'
 import { isMobile } from './utils/platform'
 
-const API_BASE = 'http://localhost:4000'
+const API_BASE = 'https://aguiar-production.up.railway.app'
 
 function App() {
   const [products, setProducts] = useState<Product[]>([])
