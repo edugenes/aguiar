@@ -4,6 +4,8 @@ const multer = require('multer');
 const fs = require('fs');
 const sqlite3 = require('sqlite3').verbose();
 const puppeteer = require('puppeteer');
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -134,6 +136,42 @@ db.serialize(() => {
       created_at TEXT NOT NULL
     )`,
   );
+
+  db.run(
+    `CREATE TABLE IF NOT EXISTS customers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      email TEXT UNIQUE NOT NULL,
+      password_hash TEXT,
+      google_id TEXT UNIQUE,
+      phone TEXT,
+      city TEXT,
+      district TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )`,
+  );
+
+  // Migração: adicionar customer_id em orders se não existir
+  db.all('PRAGMA table_info(orders)', (err, rows) => {
+    if (err) {
+      console.error('Erro ao ler metadados da tabela orders', err);
+      return;
+    }
+    const cols = rows.map((r) => r.name);
+    if (!cols.includes('customer_id')) {
+      db.run(
+        'ALTER TABLE orders ADD COLUMN customer_id INTEGER REFERENCES customers(id)',
+        (alterErr) => {
+          if (alterErr) {
+            console.error('Erro ao adicionar customer_id em orders', alterErr);
+          } else {
+            console.log('Coluna customer_id adicionada em orders');
+          }
+        },
+      );
+    }
+  });
 
   // Migração leve para novos campos comerciais
   db.all('PRAGMA table_info(products)', (err, rows) => {
@@ -270,6 +308,7 @@ function mapProduct(row) {
 function mapOrder(row) {
   return {
     id: row.id,
+    customer_id: row.customer_id || null,
     customer_name: row.customer_name,
     customer_phone: row.customer_phone,
     customer_address: row.customer_address,
@@ -281,14 +320,323 @@ function mapOrder(row) {
   };
 }
 
+function mapCustomer(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    email: row.email,
+    phone: row.phone || '',
+    city: row.city || '',
+    district: row.district || '',
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
+}
+
+// Middleware de autenticação JWT
+function authenticateToken(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+
+  if (!token) {
+    return res.status(401).json({ message: 'Token de acesso não fornecido.' });
+  }
+
+  const jwtSecret = process.env.JWT_SECRET || 'aguiar-secret-key-change-in-production';
+  jwt.verify(token, jwtSecret, (err, decoded) => {
+    if (err) {
+      return res.status(403).json({ message: 'Token inválido ou expirado.' });
+    }
+    req.customerId = decoded.customerId;
+    req.customerEmail = decoded.email;
+    next();
+  });
+}
+
 // Routes
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
 });
 
+// Autenticação e clientes
+const jwtSecret = process.env.JWT_SECRET || 'aguiar-secret-key-change-in-production';
+
+// POST /auth/register - Cadastro com email/senha
+app.post('/auth/register', async (req, res) => {
+  const { name, email, password, phone, city, district } = req.body || {};
+
+  if (!name || !email || !password) {
+    return res.status(400).json({ message: 'Nome, email e senha são obrigatórios.' });
+  }
+
+  if (password.length < 6) {
+    return res.status(400).json({ message: 'Senha deve ter pelo menos 6 caracteres.' });
+  }
+
+  const emailLower = String(email).toLowerCase().trim();
+
+  // Verificar se email já existe
+  db.get('SELECT id FROM customers WHERE email = ?', [emailLower], async (err, existing) => {
+    if (err) {
+      console.error('Erro ao verificar email existente', err);
+      return res.status(500).json({ message: 'Erro ao verificar cadastro.' });
+    }
+
+    if (existing) {
+      return res.status(409).json({ message: 'Email já cadastrado.' });
+    }
+
+    try {
+      const passwordHash = await bcrypt.hash(password, 10);
+      const now = new Date().toISOString();
+
+      const sql = `INSERT INTO customers (name, email, password_hash, phone, city, district, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
+
+      db.run(
+        sql,
+        [name, emailLower, passwordHash, phone || '', city || '', district || '', now, now],
+        function (insertErr) {
+          if (insertErr) {
+            console.error('Erro ao criar cliente', insertErr);
+            return res.status(500).json({ message: 'Erro ao criar conta.' });
+          }
+
+          const customerId = this.lastID;
+          const token = jwt.sign({ customerId, email: emailLower }, jwtSecret, {
+            expiresIn: '30d',
+          });
+
+          db.get('SELECT * FROM customers WHERE id = ?', [customerId], (selectErr, row) => {
+            if (selectErr) {
+              console.error('Erro ao buscar cliente criado', selectErr);
+              return res.status(500).json({ message: 'Erro ao carregar dados do cliente.' });
+            }
+
+            res.status(201).json({
+              token,
+              customer: mapCustomer(row),
+            });
+          });
+        },
+      );
+    } catch (hashErr) {
+      console.error('Erro ao gerar hash da senha', hashErr);
+      return res.status(500).json({ message: 'Erro ao processar senha.' });
+    }
+  });
+});
+
+// POST /auth/login - Login com email/senha
+app.post('/auth/login', async (req, res) => {
+  const { email, password } = req.body || {};
+
+  if (!email || !password) {
+    return res.status(400).json({ message: 'Email e senha são obrigatórios.' });
+  }
+
+  const emailLower = String(email).toLowerCase().trim();
+
+  db.get('SELECT * FROM customers WHERE email = ?', [emailLower], async (err, customer) => {
+    if (err) {
+      console.error('Erro ao buscar cliente', err);
+      return res.status(500).json({ message: 'Erro ao fazer login.' });
+    }
+
+    if (!customer) {
+      return res.status(401).json({ message: 'Email ou senha incorretos.' });
+    }
+
+    if (!customer.password_hash) {
+      return res.status(401).json({
+        message: 'Conta criada com Google. Use o login com Google.',
+      });
+    }
+
+    try {
+      const match = await bcrypt.compare(password, customer.password_hash);
+      if (!match) {
+        return res.status(401).json({ message: 'Email ou senha incorretos.' });
+      }
+
+      const token = jwt.sign(
+        { customerId: customer.id, email: customer.email },
+        jwtSecret,
+        { expiresIn: '30d' },
+      );
+
+      res.json({
+        token,
+        customer: mapCustomer(customer),
+      });
+    } catch (compareErr) {
+      console.error('Erro ao comparar senha', compareErr);
+      return res.status(500).json({ message: 'Erro ao verificar senha.' });
+    }
+  });
+});
+
+// POST /auth/google - Login/cadastro com Google
+app.post('/auth/google', (req, res) => {
+  const { google_id, email, name } = req.body || {};
+
+  if (!google_id || !email || !name) {
+    return res.status(400).json({ message: 'Dados do Google são obrigatórios.' });
+  }
+
+  const emailLower = String(email).toLowerCase().trim();
+
+  // Buscar por google_id ou email
+  db.get(
+    'SELECT * FROM customers WHERE google_id = ? OR email = ?',
+    [google_id, emailLower],
+    (err, existing) => {
+      if (err) {
+        console.error('Erro ao buscar cliente Google', err);
+        return res.status(500).json({ message: 'Erro ao fazer login com Google.' });
+      }
+
+      const now = new Date().toISOString();
+
+      if (existing) {
+        // Atualizar google_id se não tinha
+        if (!existing.google_id) {
+          db.run(
+            'UPDATE customers SET google_id = ?, updated_at = ? WHERE id = ?',
+            [google_id, now, existing.id],
+            (updateErr) => {
+              if (updateErr) {
+                console.error('Erro ao atualizar google_id', updateErr);
+              }
+            },
+          );
+        }
+
+        const token = jwt.sign(
+          { customerId: existing.id, email: existing.email },
+          jwtSecret,
+          { expiresIn: '30d' },
+        );
+
+        db.get('SELECT * FROM customers WHERE id = ?', [existing.id], (selectErr, row) => {
+          if (selectErr) {
+            return res.status(500).json({ message: 'Erro ao carregar dados do cliente.' });
+          }
+          res.json({
+            token,
+            customer: mapCustomer(row),
+          });
+        });
+      } else {
+        // Criar novo cliente
+        const sql = `INSERT INTO customers (name, email, google_id, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?)`;
+
+        db.run(sql, [name, emailLower, google_id, now, now], function (insertErr) {
+          if (insertErr) {
+            console.error('Erro ao criar cliente Google', insertErr);
+            return res.status(500).json({ message: 'Erro ao criar conta com Google.' });
+          }
+
+          const customerId = this.lastID;
+          const token = jwt.sign(
+            { customerId, email: emailLower },
+            jwtSecret,
+            { expiresIn: '30d' },
+          );
+
+          db.get('SELECT * FROM customers WHERE id = ?', [customerId], (selectErr, row) => {
+            if (selectErr) {
+              return res.status(500).json({ message: 'Erro ao carregar dados do cliente.' });
+            }
+            res.status(201).json({
+              token,
+              customer: mapCustomer(row),
+            });
+          });
+        });
+      }
+    },
+  );
+});
+
+// GET /me - Dados do cliente autenticado
+app.get('/me', authenticateToken, (req, res) => {
+  db.get('SELECT * FROM customers WHERE id = ?', [req.customerId], (err, row) => {
+    if (err) {
+      console.error('Erro ao buscar cliente', err);
+      return res.status(500).json({ message: 'Erro ao carregar dados.' });
+    }
+
+    if (!row) {
+      return res.status(404).json({ message: 'Cliente não encontrado.' });
+    }
+
+    res.json(mapCustomer(row));
+  });
+});
+
+// PUT /me - Atualizar perfil do cliente
+app.put('/me', authenticateToken, (req, res) => {
+  const { name, phone, city, district } = req.body || {};
+
+  if (!name || name.trim() === '') {
+    return res.status(400).json({ message: 'Nome é obrigatório.' });
+  }
+
+  const now = new Date().toISOString();
+  const sql = `UPDATE customers SET name = ?, phone = ?, city = ?, district = ?, updated_at = ?
+    WHERE id = ?`;
+
+  db.run(sql, [name, phone || '', city || '', district || '', now, req.customerId], (err) => {
+    if (err) {
+      console.error('Erro ao atualizar cliente', err);
+      return res.status(500).json({ message: 'Erro ao atualizar perfil.' });
+    }
+
+    db.get('SELECT * FROM customers WHERE id = ?', [req.customerId], (selectErr, row) => {
+      if (selectErr) {
+        return res.status(500).json({ message: 'Erro ao carregar dados atualizados.' });
+      }
+      res.json(mapCustomer(row));
+    });
+  });
+});
+
+// GET /my-orders - Pedidos do cliente autenticado
+app.get('/my-orders', authenticateToken, (req, res) => {
+  db.all(
+    'SELECT * FROM orders WHERE customer_id = ? ORDER BY created_at DESC',
+    [req.customerId],
+    (err, rows) => {
+      if (err) {
+        console.error('Erro ao listar pedidos do cliente', err);
+        return res.status(500).json({ message: 'Erro ao carregar pedidos.' });
+      }
+      res.json(rows.map(mapOrder));
+    },
+  );
+});
+
 // Orders (loja online)
-app.post('/orders', (req, res) => {
-  const { customer_name, customer_phone, customer_address, notes, total_cents, status, items_json } =
+// Rota opcionalmente protegida: se tiver token, valida; senão, aceita pedido de convidado
+app.post('/orders', (req, res, next) => {
+  // Tentar autenticar, mas não bloquear se não tiver token (permite checkout como convidado)
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (token) {
+    jwt.verify(token, jwtSecret, (err, decoded) => {
+      if (!err) {
+        req.customerId = decoded.customerId;
+      }
+      next();
+    });
+  } else {
+    next();
+  }
+}, (req, res) => {
+  const { customer_name, customer_phone, customer_address, notes, total_cents, status, items_json, customer_id } =
     req.body || {};
 
   if (!customer_name || !customer_phone || !customer_address) {
@@ -320,8 +668,12 @@ app.post('/orders', (req, res) => {
     return res.status(400).json({ message: 'Estrutura de itens do pedido inválida.' });
   }
 
+  // Usar customer_id do token (se autenticado) ou do body (se fornecido) ou null (convidado)
+  const finalCustomerId = req.customerId || (customer_id ? parseInt(customer_id, 10) : null);
+
   const now = new Date().toISOString();
   const sql = `INSERT INTO orders (
+      customer_id,
       customer_name,
       customer_phone,
       customer_address,
@@ -330,9 +682,10 @@ app.post('/orders', (req, res) => {
       status,
       items_json,
       created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
   const params = [
+    finalCustomerId,
     customer_name,
     customer_phone,
     customer_address,
