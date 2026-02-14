@@ -2,10 +2,11 @@ const express = require('express');
 const path = require('path');
 const multer = require('multer');
 const fs = require('fs');
-const sqlite3 = require('sqlite3').verbose();
 const puppeteer = require('puppeteer');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const nodemailer = require('nodemailer');
+const db = require('./db');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -13,19 +14,6 @@ const PORT = process.env.PORT || 4000;
 // Paths
 // Raiz do backend (pasta "backend")
 const ROOT_DIR = path.resolve(__dirname, '..');
-
-// Caminho do banco:
-// - Em produção (Railway, etc.): use DB_PATH se definido
-// - Caso contrário, usa "catalog.db" em um diretório local de dados
-const DEFAULT_DB_DIR =
-  (process.env.DB_DIR && process.env.DB_DIR.trim() !== '')
-    ? process.env.DB_DIR
-    : path.join(ROOT_DIR, 'data');
-
-const DB_PATH =
-  process.env.DB_PATH && process.env.DB_PATH.trim() !== ''
-    ? process.env.DB_PATH
-    : path.join(DEFAULT_DB_DIR, 'catalog.db');
 
 // Diretório para uploads (dentro do backend)
 const UPLOADS_DIR = path.join(ROOT_DIR, 'uploads');
@@ -41,16 +29,10 @@ const LOGO_PATH = path.join(
   'logo-aguiar-moderna.png',
 );
 
-// Garante que diretórios de dados existem
-const DB_DIR = path.dirname(DB_PATH);
-if (!fs.existsSync(DB_DIR)) {
-  fs.mkdirSync(DB_DIR, { recursive: true });
-}
+// Garante que diretório de uploads existe
 if (!fs.existsSync(UPLOADS_DIR)) {
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 }
-
-console.log('Usando banco SQLite em:', DB_PATH);
 
 // Middleware - CORS
 // Permite:
@@ -98,114 +80,108 @@ const storage = multer.diskStorage({
   },
 });
 
-const upload = multer({ storage });
-
-// SQLite setup
-const db = new sqlite3.Database(DB_PATH);
-
-db.serialize(() => {
-  db.run(
-    `CREATE TABLE IF NOT EXISTS products (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
-      description TEXT,
-      price_cents INTEGER NOT NULL,
-      image_path TEXT,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    )`,
-  );
-
-  db.run(
-    `CREATE TABLE IF NOT EXISTS settings (
-      key TEXT PRIMARY KEY,
-      value TEXT NOT NULL
-    )`,
-  );
-
-  db.run(
-    `CREATE TABLE IF NOT EXISTS orders (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      customer_name TEXT NOT NULL,
-      customer_phone TEXT NOT NULL,
-      customer_address TEXT NOT NULL,
-      notes TEXT,
-      total_cents INTEGER NOT NULL,
-      status TEXT NOT NULL,
-      items_json TEXT NOT NULL,
-      created_at TEXT NOT NULL
-    )`,
-  );
-
-  db.run(
-    `CREATE TABLE IF NOT EXISTS customers (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
-      email TEXT UNIQUE NOT NULL,
-      password_hash TEXT,
-      google_id TEXT UNIQUE,
-      phone TEXT,
-      city TEXT,
-      district TEXT,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    )`,
-  );
-
-  // Migração: adicionar customer_id em orders se não existir
-  db.all('PRAGMA table_info(orders)', (err, rows) => {
-    if (err) {
-      console.error('Erro ao ler metadados da tabela orders', err);
-      return;
-    }
-    const cols = rows.map((r) => r.name);
-    if (!cols.includes('customer_id')) {
-      db.run(
-        'ALTER TABLE orders ADD COLUMN customer_id INTEGER REFERENCES customers(id)',
-        (alterErr) => {
-          if (alterErr) {
-            console.error('Erro ao adicionar customer_id em orders', alterErr);
-          } else {
-            console.log('Coluna customer_id adicionada em orders');
+/** Inicializa o banco: schema PostgreSQL ou SQLite (CREATE TABLE + migrações). */
+function initDb(callback) {
+  if (db.isPostgres()) {
+    db.initSchema(callback);
+    return;
+  }
+  const sqliteDb = db._raw;
+  sqliteDb.serialize(() => {
+    sqliteDb.run(
+      `CREATE TABLE IF NOT EXISTS products (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        description TEXT,
+        price_cents INTEGER NOT NULL,
+        image_path TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )`,
+    );
+    sqliteDb.run(
+      `CREATE TABLE IF NOT EXISTS settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      )`,
+    );
+    sqliteDb.run(
+      `CREATE TABLE IF NOT EXISTS orders (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        customer_name TEXT NOT NULL,
+        customer_phone TEXT NOT NULL,
+        customer_address TEXT NOT NULL,
+        notes TEXT,
+        total_cents INTEGER NOT NULL,
+        status TEXT NOT NULL,
+        items_json TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      )`,
+    );
+    sqliteDb.run(
+      `CREATE TABLE IF NOT EXISTS customers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        email TEXT UNIQUE NOT NULL,
+        password_hash TEXT,
+        google_id TEXT UNIQUE,
+        phone TEXT,
+        city TEXT,
+        district TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )`,
+    );
+    sqliteDb.all('PRAGMA table_info(orders)', (err, rows) => {
+      if (err) {
+        console.error('Erro ao ler metadados da tabela orders', err);
+        return callback(err);
+      }
+      const orderCols = (rows || []).map((r) => r.name);
+      const runProductsMigration = () => {
+        sqliteDb.all('PRAGMA table_info(products)', (errP, rowsP) => {
+          if (errP) {
+            console.error('Erro ao ler metadados da tabela products', errP);
+            return callback(errP);
           }
-        },
-      );
-    }
-  });
-
-  // Migração leve para novos campos comerciais
-  db.all('PRAGMA table_info(products)', (err, rows) => {
-    if (err) {
-      console.error('Erro ao ler metadados da tabela products', err);
-      return;
-    }
-    const cols = rows.map((r) => r.name);
-    const missingAlters = [];
-    if (!cols.includes('category')) {
-      missingAlters.push(
-        "ALTER TABLE products ADD COLUMN category TEXT DEFAULT ''",
-      );
-    }
-    if (!cols.includes('sku')) {
-      missingAlters.push(
-        "ALTER TABLE products ADD COLUMN sku TEXT DEFAULT ''",
-      );
-    }
-    if (!cols.includes('promotional')) {
-      missingAlters.push(
-        'ALTER TABLE products ADD COLUMN promotional INTEGER NOT NULL DEFAULT 0',
-      );
-    }
-
-    missingAlters.forEach((sql) => {
-      db.run(sql, (alterErr) => {
-        if (alterErr) {
-          console.error('Erro ao aplicar migração em products', alterErr);
-        }
-      });
+          const cols = (rowsP || []).map((r) => r.name);
+          const missingAlters = [];
+          if (!cols.includes('category')) {
+            missingAlters.push("ALTER TABLE products ADD COLUMN category TEXT DEFAULT ''");
+          }
+          if (!cols.includes('sku')) {
+            missingAlters.push("ALTER TABLE products ADD COLUMN sku TEXT DEFAULT ''");
+          }
+          if (!cols.includes('promotional')) {
+            missingAlters.push(
+              'ALTER TABLE products ADD COLUMN promotional INTEGER NOT NULL DEFAULT 0',
+            );
+          }
+          if (missingAlters.length === 0) return callback(null);
+          let done = 0;
+          missingAlters.forEach((sql) => {
+            sqliteDb.run(sql, (alterErr) => {
+              if (alterErr) console.error('Erro ao aplicar migração em products', alterErr);
+              done++;
+              if (done === missingAlters.length) callback(null);
+            });
+          });
+        });
+      };
+      if (!orderCols.includes('customer_id')) {
+        sqliteDb.run(
+          'ALTER TABLE orders ADD COLUMN customer_id INTEGER REFERENCES customers(id)',
+          (alterErr) => {
+            if (alterErr) console.error('Erro ao adicionar customer_id em orders', alterErr);
+            runProductsMigration();
+          },
+        );
+      } else {
+        runProductsMigration();
+      }
     });
   });
-});
+}
 
 function getLayoutConfig(callback) {
   db.get(
@@ -351,6 +327,91 @@ function authenticateToken(req, res, next) {
     req.customerEmail = decoded.email;
     next();
   });
+}
+
+// ---------- Email (notificação de pedido) ----------
+const smtpHost = process.env.SMTP_HOST;
+const smtpUser = process.env.SMTP_USER;
+const smtpPass = process.env.SMTP_PASS;
+const smtpPort = process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT, 10) : 587;
+const smtpSecure = process.env.SMTP_SECURE === 'true';
+
+let mailTransporter = null;
+if (smtpHost && smtpUser && smtpPass) {
+  mailTransporter = nodemailer.createTransport({
+    host: smtpHost,
+    port: smtpPort,
+    secure: smtpSecure,
+    auth: { user: smtpUser, pass: smtpPass },
+  });
+}
+
+function sendOrderEmail(order) {
+  if (!mailTransporter) {
+    console.warn('SMTP não configurado. Pedido registrado, mas e-mail não enviado.');
+    return;
+  }
+  const to = process.env.ORDER_NOTIFY_TO || smtpUser;
+  let items = [];
+  try {
+    items = JSON.parse(order.items_json || '[]');
+  } catch {
+    items = [];
+  }
+  const itemsHtml = items
+    .map(
+      (item, index) => `
+        <tr>
+          <td style="padding:4px 8px;border:1px solid #e5e7eb;">${index + 1}</td>
+          <td style="padding:4px 8px;border:1px solid #e5e7eb;">${item.name || ''}</td>
+          <td style="padding:4px 8px;border:1px solid #e5e7eb;">${item.sku || ''}</td>
+          <td style="padding:4px 8px;border:1px solid #e5e7eb;">${item.quantity || 1}</td>
+          <td style="padding:4px 8px;border:1px solid #e5e7eb;">R$ ${item.price || ''}</td>
+        </tr>
+      `,
+    )
+    .join('');
+  const totalReais = centsToDecimalString(order.total_cents || 0);
+  const html = `
+    <div style="font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; color: #111827;">
+      <h2>Novo pedido - Aguiar Acessórios</h2>
+      <p><strong>Data:</strong> ${new Date(order.created_at).toLocaleString('pt-BR')}</p>
+      <h3>Dados do cliente</h3>
+      <p>
+        <strong>Nome:</strong> ${order.customer_name}<br/>
+        <strong>Telefone:</strong> ${order.customer_phone}<br/>
+        <strong>Endereço:</strong> ${order.customer_address}<br/>
+        ${order.notes ? `<strong>Observações:</strong> ${order.notes}<br/>` : ''}
+      </p>
+      <h3>Itens</h3>
+      <table cellpadding="0" cellspacing="0" style="border-collapse: collapse; width: 100%; margin-bottom: 12px;">
+        <thead>
+          <tr style="background:#f3f4f6;">
+            <th style="padding:4px 8px;border:1px solid #e5e7eb;">#</th>
+            <th style="padding:4px 8px;border:1px solid #e5e7eb;">Produto</th>
+            <th style="padding:4px 8px;border:1px solid #e5e7eb;">SKU</th>
+            <th style="padding:4px 8px;border:1px solid #e5e7eb;">Qtd</th>
+            <th style="padding:4px 8px;border:1px solid #e5e7eb;">Preço</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${itemsHtml || '<tr><td colspan="5" style="padding:8px;border:1px solid #e5e7eb;">Sem itens cadastrados.</td></tr>'}
+        </tbody>
+      </table>
+      <p><strong>Total:</strong> R$ ${totalReais}</p>
+    </div>
+  `;
+  mailTransporter.sendMail(
+    {
+      from: `"Aguiar Acessórios" <${smtpUser}>`,
+      to,
+      subject: `Novo pedido - ${order.customer_name} (R$ ${totalReais})`,
+      html,
+    },
+    (err) => {
+      if (err) console.error('Erro ao enviar e-mail de pedido:', err);
+    },
+  );
 }
 
 // Routes
@@ -1279,7 +1340,13 @@ process.on('SIGINT', () => {
   process.exit(0);
 });
 
-app.listen(PORT, () => {
-  console.log(`Backend ouvindo em http://localhost:${PORT}`);
+initDb((err) => {
+  if (err) {
+    console.error('Falha ao inicializar o banco de dados.', err);
+    process.exit(1);
+  }
+  app.listen(PORT, () => {
+    console.log(`Backend ouvindo em http://localhost:${PORT}`);
+  });
 });
 
